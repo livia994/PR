@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+
 url = "https://999.md/ro/list/animals-and-plants/other-animals"
 
 try:
@@ -10,19 +11,23 @@ try:
     if response.status_code == 200:
         print("GET request successful!")
 
-        print(response.text[:1000])
         # Parse the HTML content with BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Example: Extract product details (Assuming products are listed within a div with class 'product-item')
-        products = soup.find_all('div', class_='product-item')
+        # Find all product items (you may need to adjust this selector based on the page structure)
+        products = soup.find_all('div', class_='ads-list-photo-item')  # Adjust the class name accordingly
 
+        # Loop through each product item and extract details
         for product in products:
             # Extract product name
-            product_name = product.find('a').text.strip()
+            product_name = product.find('div', class_='ads-list-photo-item-title').find('a').text.strip()
 
             # Extract product price
-            product_price = product.find('span', class_='price').text.strip()
+            price_div = product.find('div', class_='ads-list-photo-item-price')
+            if price_div:
+                product_price = price_div.find('span', class_='ads-list-photo-item-price-wrapper').text.strip()
+            else:
+                product_price = "Negociabil"  # or handle it as needed
 
             # Extract product link
             product_link = product.find('a')['href']
