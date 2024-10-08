@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 
-# Replace with the URL of the e-commerce website
 url = "https://999.md/ro/list/animals-and-plants/other-animals"
 
 try:
