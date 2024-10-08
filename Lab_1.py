@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-
 url = "https://999.md/ro/list/animals-and-plants/other-animals"
 
 try:
