@@ -1,111 +1,89 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-import time
-import re  # Regular expression library for validating the price
+import requests
+from bs4 import BeautifulSoup
+import re
 
-# Initialize the Chrome options and driver setup
-chrome_options = Options()
-chrome_options.add_argument("--start-maximized")  # Open Chrome maximized
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+# Define the URL of the product listing page
+url = "https://floralsoul.md/catalog/?swoof=1&product_cat=plante"
 
-# Open the main product listing page
-url = "https://999.md/ro/list/animals-and-plants/other-animals"
-driver.get(url)
+# Make an HTTP GET request to fetch the page content
+response = requests.get(url)
+if response.status_code != 200:
+    print(f"Failed to fetch page. Status code: {response.status_code}")
+    exit()
 
-# Wait for the page to load (adjust sleep time if needed)
-time.sleep(5)
-
-# Find all product items by their container class
-products = driver.find_elements(By.CLASS_NAME, 'ads-list-photo-item')
+# Parse the HTML content using BeautifulSoup
+soup = BeautifulSoup(response.content, "html.parser")
 
 # Store all product details
 all_product_details = []
 
+# Find all product items by their container class
+products = soup.find_all('div', class_='product-info')
+
 # Loop through each product and extract details
-for index, product in enumerate(products):
+for product in products:
     try:
         # Extract product name
-        product_name = product.find_element(By.CLASS_NAME, 'ads-list-photo-item-title').text
-    except Exception:
-        product_name = None  # Set to None to indicate missing value
+        product_name_tag = product.find('h4', class_='product-item-name')
+        product_name = product_name_tag.text.strip() if product_name_tag else None
 
-    try:
-        # Extract product price
-        price_div = product.find_element(By.CLASS_NAME, 'ads-list-photo-item-price')
-        product_price = price_div.text if price_div else "Negociabil"
-    except Exception:
-        product_price = None  # Set to None to indicate missing value
-
-    try:
         # Extract product link
-        product_link = product.find_element(By.TAG_NAME, 'a').get_attribute('href')
-    except Exception:
-        product_link = "Link not found"
-        print(f"Error finding product link")
+        product_link_tag = product_name_tag.find('a', href=True)
+        product_link = product_link_tag['href'] if product_link_tag else "Link not found"
 
-    # Skip products that are ads (identified by their link structure)
-    if product_link.startswith("https://999.md/booster/link?token="):
-        continue  # Skip this iteration if it's an ad
+        # Extract product price
+        price_tag = product.find('span', class_='woocommerce-Price-amount')
+        product_price = price_tag.text.strip() if price_tag else "Price not found"
+    except Exception as e:
+        print(f"Error extracting data: {e}")
+        continue
 
-    # Open the product link in a new tab to scrape the other attribute
-    driver.execute_script("window.open(arguments[0]);", product_link)
-    driver.switch_to.window(driver.window_handles[1])  # Switch to the new tab
+    # Validation 1: Ensure name and price are not None or empty
+    if not product_name or not product_price:
+        print(f"Skipping product due to missing name or price: {product_name}, {product_price}")
+        continue
 
-    # Wait for the product page to load
-    time.sleep(3)
+    # Validation 2: Ensure price contains a valid number
+    if not re.search(r'\d+', product_price):
+        print(f"Skipping product due to invalid price: {product_price}")
+        continue
+
+    # Open the product link and scrape an additional attribute
+    product_page_response = requests.get(product_link)
+    if product_page_response.status_code != 200:
+        print(f"Failed to fetch product page. Status code: {product_page_response.status_code}")
+        continue
+
+    # Parse the product page HTML
+    product_page_soup = BeautifulSoup(product_page_response.content, "html.parser")
 
     try:
-        # Locate the attribute using itemprop attributes in XPath
-        label_xpath = "//span[@itemprop='name' and contains(text(), 'Sex')]"
-        value_xpath = "//span[@itemprop='value']"
+        # Extract the category
+        category_tag = product_page_soup.find('span', class_='posted_in')
+        category = category_tag.text.strip() if category_tag else "Category not found"
 
-        # Find the label and its corresponding value element
-        label_element = driver.find_element(By.XPATH, label_xpath)
-        if label_element:
-            # If "Sex" label found, retrieve the next sibling element containing its value
-            animal_type = driver.find_element(By.XPATH, value_xpath).text
-        else:
-            animal_type = "Category not found"
+        # Extract plant size
+        size_tag = product_page_soup.find('span', class_='tagged_as')
+        plant_size = size_tag.text.strip() if size_tag else "Size not found"
     except Exception as e:
-        animal_type = "Category not found"
-        print(f"Error finding animal type")
-
-    # Validation 1: Check if the product name and price are not None
-    if product_name is None or product_price is None:
-        print(f"Skipping product due to missing name or price: {product_name}, {product_price}")
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
+        print(f"Error extracting additional data: {e}")
         continue
 
-    # Validation 2: Check if the price is numeric (e.g., "300 lei" should have a number in it)
-    if not re.search(r'\d+', product_price):  # Regular expression checks for digits in the price
-        print(f"Skipping product due to invalid price format: {product_price}")
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
-        continue
-
-    # Print the extracted data for this product
-    print(f"Product Name: {product_name}, Price: {product_price}, Link: {product_link}, Category: {animal_type}")
-
-    # Close the new tab and switch back to the main product listing tab
-    driver.close()
-    driver.switch_to.window(driver.window_handles[0])
-
-    # Append the product details to our list after validation
+    # Store validated product data
     all_product_details.append({
         "Product Name": product_name,
         "Price": product_price,
         "Link": product_link,
-        "Category": animal_type
+        "Category": category,
+        "Size": plant_size
     })
-
-# Close the browser
-driver.quit()
 
 # Display all collected product details
 print("\nFinal Extracted Product Data:")
 for product in all_product_details:
-    print(product)
+    print(f"Product Name: {product['Product Name']}")
+    print(f"Price: {product['Price']}")
+    print(f"Link: {product['Link']}")
+    print(f"Category: {product['Category']}")
+    print(f"Size: {product['Size']}")
+    print("-" * 50)  # Separator between products
