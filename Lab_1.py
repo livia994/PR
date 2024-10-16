@@ -1,20 +1,44 @@
-import requests
+import socket
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 from functools import reduce
 
-# Define the URL of the product listing page
-url = "https://floralsoul.md/catalog/?swoof=1&product_cat=plante"
+# Function to perform HTTP GET request using a TCP socket
+def http_get(host, path):
+    # Create a TCP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        # Connect to the server
+        s.connect((host, 80))  # Connect to HTTP port 80
 
-# Make an HTTP GET request to fetch the page content
-response = requests.get(url)
-if response.status_code != 200:
-    print(f"Failed to fetch page. Status code: {response.status_code}")
-    exit()
+        # Create and send the HTTP GET request
+        request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+        s.sendall(request.encode())
+
+        # Receive the response
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+
+    # Decode response and return the body
+    response_str = response.decode()
+    # Split headers and body
+    header, _, body = response_str.partition('\r\n\r\n')
+    return body  # Return only the body of the response
+
+# Define the URL of the product listing page
+url = "http://floralsoul.md/catalog/?swoof=1&product_cat=plante"
+host = "floralsoul.md"
+path = "/catalog/?swoof=1&product_cat=plante"
+
+# Fetch the HTML content using TCP socket
+html_content = http_get(host, path)
 
 # Parse the HTML content using BeautifulSoup
-soup = BeautifulSoup(response.content, "html.parser")
+soup = BeautifulSoup(html_content, "html.parser")
 
 # Store all product details
 all_product_details = []
@@ -51,13 +75,8 @@ for product in products:
         continue
 
     # Open the product link and scrape an additional attribute
-    product_page_response = requests.get(product_link)
-    if product_page_response.status_code != 200:
-        print(f"Failed to fetch product page. Status code: {product_page_response.status_code}")
-        continue
-
-    # Parse the product page HTML
-    product_page_soup = BeautifulSoup(product_page_response.content, "html.parser")
+    product_page_response = http_get(host, product_link)
+    product_page_soup = BeautifulSoup(product_page_response, "html.parser")
 
     try:
         # Extract the category
