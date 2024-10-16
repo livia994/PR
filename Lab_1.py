@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from datetime import datetime
+from functools import reduce
 
 # Define the URL of the product listing page
 url = "https://floralsoul.md/catalog/?swoof=1&product_cat=plante"
@@ -78,11 +80,48 @@ for product in products:
         "Size": plant_size
     })
 
-# Display all collected product details
+# Function to convert prices
+def convert_price(price_str):
+    # Extract the numeric value and the currency
+    match = re.search(r'(\d+[\.,]?\d*)\s*([a-zA-Z]+)', price_str)
+    if match:
+        price_value = float(match.group(1).replace(',', '.'))
+        currency = match.group(2).strip().upper()
+        # Convert MDL to EUR (example conversion rate: 1 EUR = 20 MDL)
+        if currency == 'MDL':
+            return price_value / 20  # Convert to EUR
+        elif currency == 'EUR':
+            return price_value * 20  # Convert to MDL
+    return None
+
+# Filter products by price range and convert prices
+min_price = 10  # Set your minimum price in EUR
+max_price = 50  # Set your maximum price in EUR
+
+filtered_products = list(filter(lambda p: p['Price'] is not None, all_product_details))
+for product in filtered_products:
+    product['Converted Price'] = convert_price(product['Price'])
+
+filtered_products = list(filter(lambda p: p['Converted Price'] is not None and min_price <= p['Converted Price'] <= max_price, filtered_products))
+
+# Use reduce to sum up the prices of filtered products
+total_price = reduce(lambda acc, p: acc + (p['Converted Price'] if p['Converted Price'] is not None else 0), filtered_products, 0)
+
+# Attach UTC timestamp and total price to the new data structure
+timestamp = datetime.utcnow().isoformat() + 'Z'
+result = {
+    "Filtered Products": filtered_products,
+    "Total Price": total_price,
+    "Timestamp": timestamp
+}
+
+# Display final results
 print("\nFinal Extracted Product Data:")
-for product in all_product_details:
+print(f"Total Price (EUR): {result['Total Price']}")
+print(f"Timestamp: {result['Timestamp']}")
+for product in result["Filtered Products"]:
     print(f"Product Name: {product['Product Name']}")
-    print(f"Price: {product['Price']}")
+    print(f"Converted Price (EUR): {product['Converted Price']}")
     print(f"Link: {product['Link']}")
     print(f"Category: {product['Category']}")
     print(f"Size: {product['Size']}")
