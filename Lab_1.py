@@ -1,8 +1,8 @@
 import socket
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
 from functools import reduce
+from datetime import datetime, timezone
 
 # Function to perform HTTP GET request using a TCP socket
 def http_get(host, path):
@@ -104,7 +104,9 @@ filtered_products = list(
 total_price = reduce(lambda acc, p: acc + (p['Converted Price'] if p['Converted Price'] is not None else 0),
                      filtered_products, 0)
 
-timestamp = datetime.utcnow().isoformat() + 'Z'
+
+timestamp = datetime.now(timezone.utc).isoformat()
+
 result = {
     "Filtered Products": filtered_products,
     "Total Price": total_price,
@@ -126,9 +128,87 @@ def custom_serialize(data):
     else:
         return f'unknown({data})'  # Fallback for unsupported data types
 
-# Placeholder for deserialization logic (can be implemented later)
-def custom_deserialize(serialized_str):
-    pass
+
+# Custom serialization logic
+def custom_serialize(data):
+    if isinstance(data, dict):
+        items = [f'D:k:{custom_serialize(key)}:v:{custom_serialize(value)};' for key, value in data.items()]
+        return f'{{{"".join(items)}}}'
+    elif isinstance(data, list):
+        items = [custom_serialize(item) for item in data]
+        return f'L:[{"; ".join(items)}];'
+    elif isinstance(data, str):
+        return f'str({data})'
+    elif isinstance(data, int):
+        return f'int({data})'
+    elif isinstance(data, float):
+        return f'float({data})'
+    else:
+        return f'unknown({data})'
+
+
+# Custom deserialization logic
+def deserialize_custom_data(serialized_data):
+    import re
+
+    # Extract the total price and timestamp
+    total_price_match = re.search(r"D:k:str\(Total Price\):v:float\(([\d.]+)\);", serialized_data)
+    timestamp_match = re.search(r"D:k:str\(Timestamp\):v:str\((.*?)\);", serialized_data)
+
+    # Initialize deserialized data
+    deserialized_data = {
+        'Filtered Products': [],
+        'Total Price': float(total_price_match.group(1)) if total_price_match else 0.0,
+        'Timestamp': timestamp_match.group(1) if timestamp_match else '',
+    }
+
+    # Extract products
+    products_section = re.search(r"L:\[(.*?)\];", serialized_data, re.DOTALL)
+    if products_section:
+        products_str = products_section.group(1)
+
+        # Split the products into individual product entries
+        products = products_str.split('};')
+        for product in products:
+            if product.strip():
+                # Extract key-value pairs for each product
+                product_dict = {}
+                items = re.findall(r"D:k:str\((.*?)\):v:(.*?);", product)
+
+                for key, value in items:
+                    # Clean the value by removing extra spaces and potential formatting
+                    clean_value = value.strip().replace('\xa0', ' ')  # Replace non-breaking spaces
+
+                    if clean_value.startswith('str('):
+                        clean_value = clean_value[4:-1]  # Remove 'str(' and ')'
+                    elif clean_value.startswith('float('):
+                        clean_value = float(clean_value[6:-1])  # Convert to float
+                    else:
+                        clean_value = clean_value  # Leave as is
+
+                    product_dict[key] = clean_value
+
+                deserialized_data['Filtered Products'].append(product_dict)
+
+    return deserialized_data
+
+
+def extract_value(data, key):
+    """
+    Extracts the value for the given key from the custom serialized format.
+    Example: 'D:k:str(Product Name):v:str(Citrus Lemon bush);' -> 'Citrus Lemon bush'
+    """
+    prefix = f"D:k:str({key}):v:"
+    start = data.find(prefix) + len(prefix)
+
+    # Extract until the next semicolon
+    end = data.find(";", start)
+    value = data[start:end]
+
+    # Handle string vs. float conversion based on prefix
+    if value.startswith("float("):
+        return float(value[6:-1])  # Remove 'float()' and convert
+    return value.strip("str()")  # Remove 'str()' wrapper
 
 # Serialization to JSON format
 def serialize_to_json(data):
@@ -195,7 +275,12 @@ xml_output = serialize_to_xml(result)
 print("\nXML Output:")
 print(xml_output)
 
-# Custom serialization test
+
 serialized_custom_data = custom_serialize(result)
 print("\nCustom Serialized Data:")
 print(serialized_custom_data)
+
+serialized_data = custom_serialize(result)
+deserialized_data = deserialize_custom_data(serialized_data)
+print("\nCustom Deserialized Data:")
+print(deserialized_data)
