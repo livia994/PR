@@ -1,10 +1,13 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
+from flask_socketio import SocketIO, join_room, leave_room, send
 import pymysql
 from datetime import datetime
 import os
 import json
 
 app = Flask(__name__) # Creates a flask application instance
+app.config['SECRET_KEY'] = 'key123'
+socketio = SocketIO(app)
 
 UPLOAD_FOLDER = './uploads' # defines a variable for the directory path where uploaded files will be stored
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -23,6 +26,34 @@ def create_connection():
     except pymysql.MySQLError as e:
         print(f"Error: {e}")
         return None
+
+
+@app.route('/chat')
+def chat():
+    return render_template('chat.html')
+
+
+@socketio.on('join')
+def on_join(data):
+    username = data['username']
+    room = data['room']
+    join_room(room)
+    send(f'{username} has entered the room.', room=room)
+
+
+@socketio.on('leave')
+def on_leave(data):
+    username = data['username']
+    room = data['room']
+    leave_room(room)
+    send(f'{username} has left the room.', room=room)
+
+
+@socketio.on('message')
+def handle_message(data):
+    room = data['room']
+    message = data['message']
+    send(message, room=room)
 
 # CREATE - Add a new product
 """{
@@ -188,3 +219,5 @@ def upload_file():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    socketio.run(app, debug=True)
+
