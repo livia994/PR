@@ -1,10 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+    <meta charset="UTF-8">
+    <title>Chat Room</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        /* Basic styling for the entire body */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+
+        /* Chat container styling */
+        #chat-container {
+            width: 90%;
+            max-width: 500px;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        /* Input container styling */
+        #input-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #input-container input {
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #input-container button {
+            padding: 10px;
+            font-size: 14px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        #input-container button:hover {
+            background-color: #45a049;
+        }
+
+        /* Chat display area styling */
+        #chat {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #messages {
+            list-style-type: none;
+            padding: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 0;
+        }
+
+        #messages li {
+            padding: 8px;
+            margin-bottom: 6px;
+            background-color: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        /* Send message section */
+        #send-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #message {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #send-button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        #send-button:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-$END$
+    <div id="chat-container">
+        <h1>Chat Room</h1>
+        <div id="input-container">
+            <input id="room" placeholder="Room">
+            <input id="username" placeholder="Username">
+            <button onclick="joinRoom()">Join Room</button>
+            <button onclick="leaveRoom()">Leave Room</button>
+        </div>
+        <div id="chat">
+            <ul id="messages"></ul>
+            <div id="send-container">
+                <input id="message" placeholder="Message">
+                <button id="send-button" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+        function joinRoom() {
+            const room = document.getElementById("room").value;
+            const username = document.getElementById("username").value;
+            socket.emit('join', { room, username });
+        }
+
+        function leaveRoom() {
+            const room = document.getElementById("room").value;
+            const username = document.getElementById("username").value;
+            socket.emit('leave', { room, username });
+        }
+
+        function sendMessage() {
+            const room = document.getElementById("room").value;
+            const message = document.getElementById("message").value;
+            socket.emit('message', { room, message });
+            document.getElementById("message").value = ''; // Clear the message input after sending
+        }
+
+        socket.on('message', function(msg) {
+            const messages = document.getElementById('messages');
+            const newMessage = document.createElement('li');
+            newMessage.textContent = msg;
+            messages.appendChild(newMessage);
+            messages.scrollTop = messages.scrollHeight; // Scroll to the bottom when a new message arrives
+        });
+    </script>
 </body>
 </html>
