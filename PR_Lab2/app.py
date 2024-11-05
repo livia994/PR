@@ -4,6 +4,7 @@ import pymysql
 from datetime import datetime
 import os
 import json
+import threading
 
 app = Flask(__name__) # Creates a flask application instance
 app.config['SECRET_KEY'] = 'key123'
@@ -218,6 +219,8 @@ def upload_file():
         return jsonify({'error': 'Only JSON files are allowed'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True)
-    socketio.run(app, debug=True)
+    # Run HTTP server on one port
+    threading.Thread(target=lambda: app.run(port=5000)).start()
+    # Run WebSocket server on another port
+    socketio.run(app, port=5001, allow_unsafe_werkzeug=True)
 
