@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: floral_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: work
+      MYSQL_DATABASE: floralsoul_data
+      MYSQL_USER: root
+      MYSQL_PASSWORD: work
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - floral_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: floral_flask_app
+    environment:
+      FLASK_ENV: development
+      FLASK_APP: app.py
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: work
+      DB_NAME: floralsoul_data
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    networks:
+      - floral_network
+
+networks:
+  floral_network:
+
+volumes:
+  mysql_data:
