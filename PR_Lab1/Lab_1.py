@@ -149,7 +149,6 @@ def custom_serialize(data):
 
 # Custom deserialization logic
 def deserialize_custom_data(serialized_data):
-    import re
 
     # Extract the total price and timestamp
     total_price_match = re.search(r"D:k:str\(Total Price\):v:float\(([\d.]+)\);", serialized_data)
@@ -191,24 +190,6 @@ def deserialize_custom_data(serialized_data):
                 deserialized_data['Filtered Products'].append(product_dict)
 
     return deserialized_data
-
-
-def extract_value(data, key):
-    """
-    Extracts the value for the given key from the custom serialized format.
-    Example: 'D:k:str(Product Name):v:str(Citrus Lemon bush);' -> 'Citrus Lemon bush'
-    """
-    prefix = f"D:k:str({key}):v:"
-    start = data.find(prefix) + len(prefix)
-
-    # Extract until the next semicolon
-    end = data.find(";", start)
-    value = data[start:end]
-
-    # Handle string vs. float conversion based on prefix
-    if value.startswith("float("):
-        return float(value[6:-1])  # Remove 'float()' and convert
-    return value.strip("str()")  # Remove 'str()' wrapper
 
 # Serialization to JSON format
 def serialize_to_json(data):

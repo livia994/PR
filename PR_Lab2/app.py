@@ -17,17 +17,16 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER #stores the upload folder path in th
 def create_connection():
     try:
         connection = pymysql.connect(
-            host='localhost',
-            user='root',
-            password='HintalDiez()25',
-            database='floralsoul_data',
+            host=os.getenv("DB_HOST", "localhost"),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", "work"),
+            database=os.getenv("DB_NAME", "floralsoul_data"),
             cursorclass=pymysql.cursors.DictCursor
         )
         return connection
     except pymysql.MySQLError as e:
         print(f"Error: {e}")
         return None
-
 
 @app.route('/chat')
 def chat():
@@ -101,8 +100,11 @@ def create_product():
 # READ - Get all products with pagination & link for pagination: http://localhost:5000/products?limit=4&offset=0
 @app.route('/products', methods=['GET'])
 def get_products():
+    connection = create_connection()
+    if not connection:
+        return jsonify({'error': 'Failed to connect to the database'}), 500
+
     try:
-        connection = create_connection()
         product_id = request.args.get('id')
         name = request.args.get('name')
         offset = int(request.args.get('offset', 0))
@@ -124,8 +126,8 @@ def get_products():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
-        if connection:
-            connection.close()
+        connection.close()
+
 
 # UPDATE - Update a product, link to use http://localhost:5000/products?id=2 this is update by id
 """{
@@ -219,8 +221,5 @@ def upload_file():
         return jsonify({'error': 'Only JSON files are allowed'}), 400
 
 if __name__ == '__main__':
-    # Run HTTP server on one port
-    threading.Thread(target=lambda: app.run(port=5000)).start()
-    # Run WebSocket server on another port
-    socketio.run(app, port=5001, allow_unsafe_werkzeug=True)
+    socketio.run(app, port=5000, allow_unsafe_werkzeug=True)
 
