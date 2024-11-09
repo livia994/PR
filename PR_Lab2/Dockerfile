@@ -1,26 +1,20 @@
-FROM python:3.9-slim
+# Use an official Python runtime as a parent image
+FROM python:3.9.13-slim
 
-# Set the working directory
+# Set the working directory in the container
 WORKDIR /app
 
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Install system dependencies required for cryptography
-RUN apt-get update && \
-    apt-get install -y gcc libssl-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
+# Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install pymysql cryptography
 
-# Expose the ports for Flask (5000) and SocketIO (5001)
-EXPOSE 5000 5001
+# Expose the port the app runs on
+EXPOSE 5000
 
-# Set environment variables for Flask
+# Define environment variable for Flask app
 ENV FLASK_APP=app.py
-ENV FLASK_ENV=development
 
-# Run the Flask server with SocketIO
-CMD ["python", "app.py"]
+# Run the Flask app
+CMD ["flask", "run", "--host=0.0.0.0"]
