@@ -12,7 +12,7 @@ services:
       - MYSQL_HOST=db
       - MYSQL_USER=root
       - MYSQL_PASSWORD=rootpassword
-      - MYSQL_DB=flaskdb
+      - MYSQL_DB=floralsoul_data
     depends_on:
       - db
     volumes:
@@ -23,7 +23,7 @@ services:
     container_name: mysql-db
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: flaskdb
+      MYSQL_DATABASE: floralsoul_data
     ports:
       - "3307:3306"
     volumes:

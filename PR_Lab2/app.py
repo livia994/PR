@@ -3,12 +3,14 @@ from flask_socketio import SocketIO, join_room, leave_room, send
 import os
 import json
 from flask_sqlalchemy import SQLAlchemy
+import pymysql
+import time
 
 
 app = Flask(__name__) # Creates a flask application instance
 app.config['SECRET_KEY'] = 'key123'
 socketio = SocketIO(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:work@localhost:3306/floralsoul_data'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:rootpassword@db:3306/floralsoul_data'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # To disable Flask-SQLAlchemy modification tracking
 db = SQLAlchemy(app)
 
@@ -16,6 +18,30 @@ UPLOAD_FOLDER = './uploads' # defines a variable for the directory path where up
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER #stores the upload folder path in the Flask app's config
 
+
+def wait_for_mysql():
+    retries = 5  # Number of retries
+    delay = 5  # Delay between retries in seconds
+    for _ in range(retries):
+        try:
+            connection = pymysql.connect(
+                host='db',
+                user='root',
+                password='rootpassword',
+                database='floralsoul_data'
+            )
+            connection.close()  # Close the connection if successful
+            print("Connected to MySQL database")
+            return True
+        except pymysql.MySQLError as e:
+            print(f"Waiting for MySQL database: {e}")
+            time.sleep(delay)  # Wait before retrying
+    return False
+
+# It will wait for the database before running the app
+if not wait_for_mysql():
+    print("Could not connect to MySQL database after retries.")
+    exit(1)  # Exit if we can't connect to the database
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
