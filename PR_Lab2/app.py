@@ -1,32 +1,35 @@
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, join_room, leave_room, send
-import pymysql
-from datetime import datetime
 import os
 import json
-import threading
+from flask_sqlalchemy import SQLAlchemy
+
 
 app = Flask(__name__) # Creates a flask application instance
 app.config['SECRET_KEY'] = 'key123'
 socketio = SocketIO(app)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:work@localhost:3306/floralsoul_data'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # To disable Flask-SQLAlchemy modification tracking
+db = SQLAlchemy(app)
 
 UPLOAD_FOLDER = './uploads' # defines a variable for the directory path where uploaded files will be stored
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER #stores the upload folder path in the Flask app's config
 
-def create_connection():
-    try:
-        connection = pymysql.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", "work"),
-            database=os.getenv("DB_NAME", "floralsoul_data"),
-            cursorclass=pymysql.cursors.DictCursor
-        )
-        return connection
-    except pymysql.MySQLError as e:
-        print(f"Error: {e}")
-        return None
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    price = db.Column(db.Numeric(10, 2))
+    link = db.Column(db.String(500), unique=True)
+    category = db.Column(db.String(100))
+    size = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def __repr__(self):
+        return f'<Product {self.name}>'
+
+with app.app_context():
+    db.create_all()
 
 @app.route('/chat')
 def chat():
@@ -63,70 +66,72 @@ def handle_message(data):
   "size": "Large"
 }
 """
-@app.route('/products', methods=['POST'])  # defines a route for https requests
+@app.route('/products', methods=['POST'])
 def create_product():
     try:
-        connection = create_connection()
         data = request.get_json()
 
         required_fields = ['name', 'price', 'category', 'size']
         if not all(field in data for field in required_fields):
             return jsonify({'error': 'Missing required fields'}), 400
 
-        with connection.cursor() as cursor:
-            sql = """
-                INSERT INTO products (name, price, category, size, created_at)
-                VALUES (%s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql, (
-                data['name'],
-                data['price'],
-                data['category'],
-                data['size'],
-                datetime.now()
-            ))
-            connection.commit()
+        new_product = Product(
+            name=data['name'],
+            price=data['price'],
+            category=data['category'],
+            size=data['size']
+        )
 
-            return jsonify({
-                'message': 'Product created successfully',
-                'id': cursor.lastrowid
-            }), 201
+        db.session.add(new_product)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Product created successfully',
+            'id': new_product.id
+        }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        if connection:
-            connection.close()
+
 
 # READ - Get all products with pagination & link for pagination: http://localhost:5000/products?limit=4&offset=0
 @app.route('/products', methods=['GET'])
 def get_products():
-    connection = create_connection()
-    if not connection:
-        return jsonify({'error': 'Failed to connect to the database'}), 500
-
     try:
         product_id = request.args.get('id')
         name = request.args.get('name')
         offset = int(request.args.get('offset', 0))
         limit = int(request.args.get('limit', 10))
 
-        with connection.cursor() as cursor:
-            if product_id:
-                cursor.execute("SELECT * FROM products WHERE id = %s", (product_id,))
-                product = cursor.fetchone()
-                return jsonify(product) if product else ('Product not found', 404)
-            elif name:
-                cursor.execute("SELECT * FROM products WHERE name LIKE %s LIMIT %s OFFSET %s", (f"%{name}%", limit, offset))
-                products = cursor.fetchall()
-                return jsonify(products)
-            else:
-                cursor.execute("SELECT * FROM products LIMIT %s OFFSET %s", (limit, offset))
-                products = cursor.fetchall()
-                return jsonify(products)
+        if product_id:
+            product = Product.query.get(product_id)
+            if not product:
+                return jsonify({'error': 'Product not found'}), 404
+            return jsonify({
+                'id': product.id,
+                'name': product.name,
+                'price': str(product.price),
+                'category': product.category,
+                'size': product.size,
+                'created_at': product.created_at
+            })
+
+        query = Product.query
+        if name:
+            query = query.filter(Product.name.like(f"%{name}%"))
+        products = query.offset(offset).limit(limit).all()
+
+        return jsonify([{
+            'id': product.id,
+            'name': product.name,
+            'price': str(product.price),
+            'category': product.category,
+            'size': product.size,
+            'created_at': product.created_at
+        } for product in products])
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
+
 
 
 # UPDATE - Update a product, link to use http://localhost:5000/products?id=2 this is update by id
@@ -140,7 +145,6 @@ def get_products():
 @app.route('/products', methods=['PUT'])
 def update_product():
     try:
-        connection = create_connection()
         product_id = request.args.get('id')
         if not product_id:
             return jsonify({'error': 'Product ID is required'}), 400
@@ -149,55 +153,40 @@ def update_product():
         if not data:
             return jsonify({'error': 'No update data provided'}), 400
 
-        update_fields = []
-        update_values = []
-        for key in ['name', 'price', 'category', 'size']:
-            if key in data:
-                update_fields.append(f"{key} = %s")
-                update_values.append(data[key])
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        if not update_fields:
-            return jsonify({'error': 'No valid fields to update'}), 400
+        for key, value in data.items():
+            if hasattr(product, key):
+                setattr(product, key, value)
 
-        update_values.append(product_id)
+        db.session.commit()
 
-        with connection.cursor() as cursor:
-            sql = f"UPDATE products SET {', '.join(update_fields)} WHERE id = %s"
-            cursor.execute(sql, tuple(update_values))
-            connection.commit()
+        return jsonify({'message': 'Product updated successfully'})
 
-            if cursor.rowcount == 0:
-                return jsonify({'error': 'Product not found'}), 404
-
-            return jsonify({'message': 'Product updated successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        if connection:
-            connection.close()
 
 # DELETE - Delete a product
 @app.route('/products', methods=['DELETE'])
 def delete_product():
     try:
-        connection = create_connection()
         product_id = request.args.get('id')
         if not product_id:
             return jsonify({'error': 'Product ID is required'}), 400
 
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
-            connection.commit()
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-            if cursor.rowcount == 0:
-                return jsonify({'error': 'Product not found'}), 404
+        db.session.delete(product)
+        db.session.commit()
 
-            return jsonify({'message': 'Product deleted successfully'})
+        return jsonify({'message': 'Product deleted successfully'})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        if connection:
-            connection.close()
 
 # FILE UPLOAD - Accepts multipart/form-data file uploads
 @app.route('/upload', methods=['POST'])
@@ -222,4 +211,3 @@ def upload_file():
 
 if __name__ == '__main__':
     socketio.run(app, port=5000, allow_unsafe_werkzeug=True)
-
