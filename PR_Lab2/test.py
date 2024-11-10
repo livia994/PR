@@ -6,7 +6,7 @@ app = Flask(__name__)
 # Function to send message to the TCP server
 def send_to_tcp_server(message):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect(('localhost', 12346))  # Connect to the TCP server
+        s.connect(('localhost', 12347))  # Connect to the TCP server
         s.sendall(message.encode())
         response = s.recv(1024).decode()  # Get response from the server
     return response
